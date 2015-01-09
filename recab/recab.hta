@@ -1,0 +1,38 @@
+<head>
+<hta:application id="recab" applicationname="recab" border="dialog" borderstyle="normal"  innerborder="no" scroll="no" selection="no"
+caption="yes" showintaskbar="yes" contextmenu="no" sysmenu="yes" minimizebutton="yes" maximizebutton="no"
+single-instance="yes" icon="%windir%\system32\shell32.dll" version="1.0"
+/>
+<title>MSI RECAB</title>
+<style>
+ body, button, input, p, td, select {font-family:Tahoma;font-size:11px}
+ optgroup {font-family:Tahoma;font-size:12px;font-weight:normal;font-style:normal}
+ //button, input {background-color:white;}
+ a:hover{color:#000000}
+ a:visited{color:#000000}
+ body {padding-right:3;filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#ffffff,endColorstr=#efedde)}
+ .gradient {filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#000099,endColorstr=#ccccff)}
+</style>
+</head>
+<body id="RCbody" onload="window.resizeTo(300,400);" style="background-color:white;margin-top:0;margin-right:0;" link=#999999 vlink=#999999 alink=#999999>
+<div style="position:absolute;left:0;top:0;width:300;height:40;background-color:#cbcbcb;color:#ffffff;padding:10" class="gradient">Flatbyte's
+<span style="font-family:Trebuchet MS,Verdana;font-size:24px;font-weight:bold;filter:Glow(color=#000000,strength=5);width:100%">MSI RECAB
+</span></div>
+<br><br><br><br><br>
+Select MSI File:
+<input type=file id="msifile" size=24 class="button" value="Search">
+<hr noshade style="height:1px">
+or select directory with MSI Files
+<span><a href="#">.\</a></span>
+<hr noshade style="height:1px">
+<fieldset style="padding-right:5;padding-left:5;padding-bottom:5"><legend id="leg"><input type="button" value="ReCAB!" OnClick=";"></legend>
+<textarea id="txarea" size=28 style="font-family:FixedSys;width:260;height:180;">
+</textarea>
+</fieldset>
+<div style="position:absolute;bottom:0;left:0;color:#cccccc"><nobr>(c)2004 by <a href="http://www.flatbyte.com" target=_new>flatbyte.com</a>, All Rights reserved.</nobr></div>
+</body>
+</html>
+
+
+
+
