@@ -1,0 +1,484 @@
+<html>
+<head>
+<hta:application id="COMMANDO" applicationname="COMMANDO" border="dialog" borderstyle="normal"  innerborder="no" scroll="no" selection="no"
+caption="yes" showintaskbar="yes" contextmenu="no" sysmenu="yes" minimizebutton="yes" maximizebutton="no"
+single-instance="yes" icon="%windir%\system32\msi.dll" version="1.0"
+/>
+<script language="jscript">
+var sMsiPath;
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+var wsh = new ActiveXObject("WScript.Shell");
+var envTemp=wsh.ExpandEnvironmentStrings("%temp%");
+var envWindir=wsh.ExpandEnvironmentStrings("%windir%");
+var gPathTour=envWindir+"/Help/Tours/htmlTour/";
+var gPathTree=envWindir+"/PCHealth/HelpCtr/System/images/Expando/";
+var gPathIcons=envWindir+"/PCHealth/HelpCtr/System/sysinfo/graphics/";
+var iFileCount, iMsiFileCount;
+var iWhichTab=0;
+
+function SelectAll () {
+	 var iSel=cb_selall.checked;
+	 for(var i=0;i<MsiApps.length;i++) {
+		MsiApps.options[i].selected=iSel?true:false;
+		}
+	 for(var i=0;i<MsiInstalledApps.length;i++) {
+		MsiInstalledApps.options[i].selected=iSel?true:false;
+		}
+}
+
+function SelectBasicUI() {
+ var iSel=cb_basicui.checked;
+ if(!iSel) {
+	 cb_nocancel.checked=false;
+	 sp_nocancel.disabled=true;
+   }
+ else {
+	 sp_nocancel.disabled=false;
+   }
+}
+
+function StepProgressBar(i) {
+	if(!i) i=5;
+	if(ProgBar.width<350) {
+		ProgBar.width+=i;
+	 	}
+	else ProgBar.width=0;
+	return;
+ }
+function InitInstalledProducts() {
+   ResetInstalledSelectList();
+   var installer = new ActiveXObject("WindowsInstaller.Installer");
+   var products = installer.Products;
+   for( var i=0; i < products.Count; i++ ) {
+      AddOption(installer.ProductInfo(products.Item(i), "ProductName"), products.Item(i), 1);
+      }
+}
+function InitMsiEntries() {
+	PopulateMsiEntries("./");
+}
+function PopulateMsiEntries(sFolder) {
+	gibody.style.cursor='wait';
+	ProgressText.innerText="Searching for MSI files...";
+   iFileCount=iMsiFileCount=0;
+
+   hPopup=window.createPopup();
+   var oPopBody = hPopup.document.body;
+
+	var f = fso.GetFolder(sFolder);
+	var fenum = new Enumerator(f.files);
+   for (; !fenum.atEnd(); fenum.moveNext()) {
+      szTmp=fenum.item().Name;
+      if(szTmp.search(/msi$/i)>=0) {
+         szTmp2=fso.BuildPath("",fenum.item());
+         AddMsiItem(szTmp2);
+      }
+   }
+	
+   ProcTree(sFolder);
+
+	ProgressText.innerText=iFileCount+" Files processed. "+iMsiFileCount+" MSI Files found.";
+	gibody.style.cursor='auto';
+}
+function ProcTree(szParent) {
+	var f = fso.GetFolder(szParent);
+	var fenum = new Enumerator(f.SubFolders);
+
+	ProgressFN.innerText=f;
+	if (fenum) {
+	  for (; !fenum.atEnd(); fenum.moveNext()) {
+			fc = new Enumerator(fenum.item().files);
+		  for (; !fc.atEnd(); fc.moveNext()) {
+            szTmp=fc.item().Name;
+		  	   StepProgressBar(1);
+            iFileCount++;
+		  	   PumpMsg();
+
+   		  	if(szTmp.search(/msi$/i)>=0) {
+   		    	szTmp2=fso.BuildPath("",fc.item());
+   		   	AddMsiItem(szTmp2);
+   			   }
+		  	}
+	    ProcTree(fenum.item());
+	    //a=fenum.item();
+	    //window.setTimeout("ProcTree("+a+")",100);
+		}
+	}
+}
+function AddMsiItem(sFile) {
+ 	var installer = new ActiveXObject("WindowsInstaller.Installer");
+	var msiDb = installer.OpenDatabase(sFile,0);
+	msiView = msiDb.OpenView("SELECT * FROM Property WHERE Property = 'ProductName'");
+	msiView.Execute();
+	msiRecord=msiView.Fetch();
+	var sPName = msiRecord.StringData(2);
+	sTemp=""+sPName;
+   msiView.Close();
+
+	msiView = msiDb.OpenView("SELECT * FROM Property WHERE Property = 'ProductVersion'");
+	msiView.Execute();
+	msiRecord=msiView.Fetch();
+	var sPVer = msiRecord.StringData(2);
+	sTemp+=" v"+sPVer;
+   msiView.Close();
+
+	sN=sFile.lastIndexOf("\\");
+ 	sTemp+=" ("+sFile.substr(sN+1)+")";
+ 	AddOption(sTemp, sFile, 0);
+   iMsiFileCount++;
+   //msiDb.Close();
+}
+function AddOption(sText, sValue, iType) {
+	var oOption = document.createElement("OPTION");
+	oOption.text=sText;
+	oOption.value=sValue;
+	if(!iType) MsiApps.add(oOption);
+   else MsiInstalledApps.add(oOption);
+	return;
+}
+
+function ChooseRootFolder() {
+ var oShell = new ActiveXObject("Shell.Application");
+ var oFolder = oShell.BrowseForFolder(0, "Please select a new root folder. All subfolders of the selected folder will be searched for MSI Installations.", 0);
+ if(oFolder!=null) {
+	 oFolderItem = oFolder.Self;
+	 var SelPath=sDisplayedFolder=oFolderItem.Path;
+
+	 if(SelPath.length>40) {
+	 	sDisplayedFolder=SelPath.substr(0,12)+"[...]"+SelPath.substr(SelPath.length-20);
+	 	}
+
+	 SelFolder.innerText=sDisplayedFolder;
+	 SelFolder.title=SelPath;
+
+	 // populate again!
+	 if(confirm("Scan folder and subfolders?")) {
+			ProgBar.width=0;
+			ResetSelectList();
+			PopulateMsiEntries(SelPath);
+		}
+	}
+ }
+function ResetSelectList() {
+	for(var i=MsiApps.length-1; i>-1 ;i--) {
+		MsiApps.remove(i);
+	}
+}
+function ResetInstalledSelectList() {
+	for(var i=MsiInstalledApps.length-1; i>-1 ;i--) {
+		MsiInstalledApps.remove(i);
+	}
+}
+
+
+function ProcessMsiFiles() {
+	ProgBar.width=0;
+	var sInstallString = "msiexec ";
+   var sParamString="";
+
+   if(cb_basicui.checked) {
+      sParamString+=" /qb-";
+      if(cb_nocancel.checked) sParamString+="!";
+      }
+   else sParamString+=" /qr"; 
+
+   if(cb_allusers.checked) sParamString+=" ALLUSERS=1";
+
+
+   if (iWhichTab==2) {
+	   var iStep=Math.ceil(350/MsiInstalledApps.length);
+      sInstallString+="/x ";
+      ProgressText.innerText="Uninstalling selected programs...";
+      for(var i=0; i<MsiInstalledApps.length; i++) {
+         StepProgressBar(iStep);
+         if(MsiInstalledApps.options[i].selected) {
+            ProgressFN.innerText=MsiInstalledApps.options[i].text;
+         
+            if(cb_msilogs.checked) sLogString=" /l*v "+envTemp+"\\"+MsiInstalledApps.options[i].text+".log";
+            else sLogString="";
+            
+            wsh.Run(sInstallString+" "+MsiInstalledApps.options[i].value+sParamString+sLogString,8 , true);
+            MsiInstalledApps.options[i].selected=false;
+            }
+         }
+      InitInstalledProducts();
+      }
+   else {
+	   var iStep=Math.ceil(350/MsiApps.length);
+
+      if(cb_advt.checked) {
+         if(cb_allusers.checked) sInstallString+="/jm ";
+         else sInstallString+="/ju ";
+
+         ProgressText.innerText="Advertising selected MSI files...";
+         sParamString="";
+         }
+      else {
+         sInstallString+="/i ";
+         ProgressText.innerText="Installing selected MSI files...";
+         }
+      for(var i=0; i<MsiApps.length; i++) {
+         StepProgressBar(iStep);
+         if(MsiApps.options[i].selected) {
+            ProgressFN.innerText=MsiApps.options[i].value;
+         
+            if(cb_msilogs.checked) sLogString=" /l*v "+wsh.ExpandEnvironmentStrings("%temp%")+"\\"+MsiApps.options[i].text+".log";
+            else sLogString="";
+            
+            wsh.Run(sInstallString+"\""+MsiApps.options[i].value+"\""+sParamString+sLogString,8 , true);
+            MsiApps.options[i].selected=false;
+            }
+         }
+      }
+
+	ProgressText.innerText="Finished.";
+	ProgressFN.innerText="";
+
+}
+function PumpMsg() {
+   tbl.refresh();
+   document.recalc();;
+   return;
+   }
+function SortList() {
+   if (iWhichTab==2) SortInstalledList();
+   else {
+      for(i=0;i<MsiApps.length;i++) {
+         for(j=0;j<MsiApps.length-1;j++) {
+            if(MsiApps.children(i).text<MsiApps.children(j).text) {
+               MsiApps.children(i).swapNode(MsiApps.children(j));
+               }
+            }
+         }
+      }
+   }
+function SortInstalledList() {
+   for(i=0;i<MsiInstalledApps.length;i++) {
+      for(j=0;j<MsiInstalledApps.length-1;j++) {
+         if(MsiInstalledApps.children(i).text<MsiInstalledApps.children(j).text) {
+            MsiInstalledApps.children(i).swapNode(MsiInstalledApps.children(j));
+            }
+         }
+      }
+   }
+function CFSelect(sFeatureName, iFeatureState) {
+   ConfigCtrl.style.display='';
+   fName.innerText=sFeatureName;
+   fState.options[iFeatureState-1].selected=true;
+   }
+
+function ConfigureFeature(sFeatureName, iFeatureState, sGuid) {
+   if(confirm("Change Featurestate of "+sFeatureName+" ["+iFeatureState+"] ?")) {
+      var installer = new ActiveXObject("WindowsInstaller.Installer");
+      installer.ConfigureFeature(sGuid, sFeatureName, parseInt(iFeatureState));
+      try {
+         ShowFeatures(sGuid, "");
+         }
+      catch(e) {
+         ShowTab(2);
+         }
+      }
+   }
+
+function ShowFeatures(sGuid, sName) {
+   var installer = new ActiveXObject("WindowsInstaller.Installer");
+   var features = installer.Features(sGuid);
+   ShowTab(3);
+   fGuid.value=sGuid;
+   if(sName!="") hdrPack.innerHTML="Package: <b id=\"hdrPackName\">"+sName+"</b>";
+   hudel.document.close();
+   hudel.document.write("<html><body style='margin:0;' vlink=#000000 alink=#ff9999><div style='font-family:Tahoma;font-size:11px'>");
+
+   for( var i=0; i < features.Count; i++ ) {
+      if(installer.FeatureParent(sGuid, features(i)) != "") hudel.document.write("&nbsp;&nbsp;");
+      var iState=installer.FeatureState(sGuid, features(i));
+      hudel.document.write(TranslateInstallStates(iState));
+      hudel.document.write(" <a href=\"javascript:;\" OnClick=\"parent.CFSelect('"+features(i)+"',"+iState+")\">"+features(i)+"</a><br>");
+      }
+   hudel.document.write("</div></body></html>");
+   
+   }
+function TranslateInstallStates(k) {
+   sRet="";
+   switch(k) {
+      case 1:
+         sRet="<img src='"+gPathIcons+"personalizing.gif' width=16 align=absmiddle>"; //advertised
+         break;
+      case 2:
+         sRet="<img src='"+gPathIcons+"r1_c2.gif' height=2 width=10 align=absmiddle hspace=3>"; //absent
+         break;
+      case 3:
+         sRet="<img src='"+gPathIcons+"drive.gif' width=16 align=absmiddle>"; //local
+         break;
+      case 4:
+         sRet="<img src='"+gPathIcons+"cd.gif' width=16 align=absmiddle>"; //source
+         break;
+      default:
+         sRet="<img src='"+gPathIcons+"error.gif' width=16 align=absmiddle>"; //broken
+         break;
+      }
+   return(sRet);
+   }
+function ShowTab(i) {
+   InstMode.style.display='none';  
+   UnInstMode.style.display='none';
+   myFrame.style.display='none';
+   fLeg.style.display='none';
+   
+   hdrPack.style.display='none';
+   ConfigCtrl.style.display='none';
+  
+   hdr.style.display='';
+   ProgressCtrl.style.display='';
+   hdrI.style.display='none';
+   hdrU.style.display='none';
+   
+   tab1.className='taboff';
+   tab2.className='taboff';
+   tab3.className='taboff';
+   tab3.disabled=true;
+   switch(i) {
+      case 0:
+      case 1:
+      default:
+         tab1.className='tabon';
+         Process.value="Install";
+         Process.style.backgroundColor="#ffffff";
+         InstMode.style.display='';
+         hdrI.style.display='';
+         iWhichTab=1;
+         break;
+      case 2:
+         tab2.className='tabon';
+         Process.value="Uninstall";
+         Process.style.backgroundColor="#ff9999";
+         UnInstMode.style.display='';
+         hdrU.style.display='';
+         InitInstalledProducts();
+         iWhichTab=2;
+         break;
+      case 3:
+         tab3.className='tabon';
+         tab3.disabled=false;
+         myFrame.style.display='';
+         fLeg.style.display='';
+         hdr.style.display='none';
+         hdrPack.style.display='';
+         ProgressCtrl.style.display='none';
+         break;
+      }
+   gibody.focus();
+   }
+
+function Go() {
+   window.resizeTo(550,450);
+   window.focus();
+   ShowTab(1);
+   window.setTimeout('InitMsiEntries()',50);
+   }
+
+</script>
+<title>MSI COMMANDO</title>
+<style>
+ body, button, input, p, td, select {font-family:Tahoma;font-size:11px}
+ optgroup {font-family:Tahoma;font-size:12px;font-weight:normal;font-style:normal}
+ button, input {background-color:white;}
+ a:hover{color:#000000}
+ a:visited{color:#000000}
+ .tabgray {border:1px solid black;border-top:none;background-color:#cccccc;font-weight:bold;}
+ .tabon {border:1px solid black;border-top:none;background-color:#eeeeee;font-weight:bold;}
+ .taboff {border:1px solid gray dashed;border-top:none;background-color:#ffffff;font-weight:normal;}
+ .gradient {filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#000099,endColorstr=#ccccff)}
+</style>
+</head>
+<body id="gibody" onload="Go();" style="background-color:white;margin-top:0;margin-right:0" link=#999999 vlink=#999999 alink=#999999>
+
+<div style="position:absolute;left:0;top:0;width:550;height:60;background-color:#cbcbcb;color:#ffffff;padding:10" class="gradient">Flatbyte's
+<div style="font-family:Trebuchet MS,Verdana;font-size:36px;font-weight:bold;filter:Glow(color=#000000,strength=5);width:100%">MSI COMMANDO
+</div></div>
+<br><br><br><br><br><br>
+<br style="line-height:6px">
+<div id="hdr" style="width:450">The following Installations are
+<span id="hdrI">located in <a href="#" OnClick="javascript:ChooseRootFolder()" id="SelFolder" title="./">./</a>
+</span><span id="hdrU" style="display:none">installed on your Computer.
+</span>
+</div>
+<div id="hdrPack" style="display:none"></div>
+
+<table><tr><td>
+<div id="InstMode">
+<select id="MsiApps" size=17 style="width=350" multiple OnDblClick="alert(this.options[this.selectedIndex].value)" OnClick="cb_selall.checked=false;">
+
+</select>
+</div>
+<div id="UnInstMode" style="display:none">
+<select id="MsiInstalledApps" size=17 style="width=350" multiple OnDblClick="ShowFeatures(this.options[this.selectedIndex].value, this.options[this.selectedIndex].text)" OnClick="cb_selall.checked=false;">
+
+</select>
+</div>
+<div id="myFrame" style="display:none">
+<iframe id="hudel" style="width:348;height:225;border:1px groove gray" APPLICATION=yes></iframe>
+</div>
+
+<table><tr>
+<td id="tab1"><a href="#" style="text-decoration:none" OnClick="ShowTab(1);">&nbsp;Install Mode&nbsp;</a></td>
+<td id="tab2"><a href="#" style="text-decoration:none" OnClick="ShowTab(2);">&nbsp;Maintain Mode&nbsp;</a></td>
+<td id="tab3"><a href="#" style="text-decoration:none">&nbsp;Feature Mode&nbsp;</a></td>
+</tr></table>
+
+</td><td valign=top align=left>
+&nbsp;<fieldset style="padding:10px;width:145">
+<input type=checkbox id="cb_selall" OnClick="javascript:SelectAll();">Select All
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type=button id="cb_sort" OnClick="javascript:SortList();" value="Sort">
+<hr style="height:1;">
+<input type=checkbox id="cb_basicui" checked OnClick="javascript:SelectBasicUI();">Basic Installer UI
+<br>
+<span id="sp_nocancel"><input type=checkbox id="cb_nocancel" checked>No CANCEL</span>
+<br>
+<input type=checkbox id="cb_allusers" checked>Install per machine
+<br>
+<input type=checkbox id="cb_msilogs">Write MSI Logs
+<br>
+<input type=checkbox id="cb_advt">Advertise only
+<hr>
+<input type=button id="Process" OnClick="ProcessMsiFiles();" value="Install" style="width:120">
+</fieldset>
+       
+</td></tr></table>
+<br>
+
+<div id="ProgressCtrl">
+<div id="ProgressText">&nbsp;</div>
+<table border=0 id="tbl">&nbsp;<span style="border:1px solid #cccccc;width:350px"><img src="C:/windows/system32/oobe/images/newtop1.jpg" height=5 width=0 id="ProgBar"></span></table>
+<div id="ProgressFN">&nbsp;</div>
+</div>
+<div id="ConfigCtrl" style="display:none">
+Configuring <b><span id="fName">hudel</span></b> to 
+<select id="fState" size=1>
+<option value=1>Advertised
+<option value=2>Absent (Not installed)
+<option value=3>Run Local
+<option value=4>Run from Source
+</select><input type="hidden" id="fGuid">
+&nbsp;&nbsp;<input type=button value="Configure" onClick="ConfigureFeature(fName.innerText, fState.options[fState.selectedIndex].value, fGuid.value)">
+</div>
+
+<div id="fLeg" style="background-color:#eeeeee;font-weight:bold;padding:5;width:150;height:200;position:absolute;right:25;top:100;border:1px solid blue;z-Index:3">
+<u>Legend:</u> <br><br>
+<script>
+document.write(TranslateInstallStates(1)+" advertised <br><br>");
+document.write(TranslateInstallStates(2)+" absent <br><br>");
+document.write(TranslateInstallStates(3)+" local <br><br>");
+document.write(TranslateInstallStates(4)+" source <br><br>");
+document.write(TranslateInstallStates(0)+" broken <br>");
+</script>
+</div>
+
+<div style="position:absolute;right:-10;bottom:-10;z-Index:-5">
+<script>
+document.write("<img src='"+gPathTour+"connected_wizard_big.jpg'>")
+</script>
+</div>
+<div style="position:absolute;bottom:0;left:0;color:#cccccc">(c)2004 by <a href="http://www.flatbyte.com" target=_new>flatbyte.com</a>, All Rights reserved. Free for non-commercial use.</div>
+
+</body>
+</html>
