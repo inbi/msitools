@@ -1,0 +1,629 @@
+<head>
+<script src="mytree.js"></script>
+<hta:application id="KWYJIBO" applicationname="KWYJIBO" border="dialog" borderstyle="normal"  innerborder="no" scroll="no" selection="no"
+caption="yes" showintaskbar="yes" contextmenu="no" sysmenu="yes" minimizebutton="yes" maximizebutton="no"
+single-instance="yes" icon="%windir%\system32\msi.dll" version="1.0"
+/>
+<script>
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+var wsh = new ActiveXObject("WScript.Shell");
+var installer = new ActiveXObject("WindowsInstaller.Installer");
+var envTemp=wsh.ExpandEnvironmentStrings("%temp%");
+var envWindir=wsh.ExpandEnvironmentStrings("%windir%");
+var gPathTour=envWindir+"/Help/Tours/htmlTour/";
+var gPathTree=envWindir+"/PCHealth/HelpCtr/System/images/Expando/";
+var gPathPBar=envWindir+"/PCHealth/HelpCtr/System/images/";
+var gPathIcons=envWindir+"/PCHealth/HelpCtr/System/sysinfo/graphics/";
+var gPathImg=envWindir+"/system32/oobe/images/";
+var iFDObj = 0;
+var oFDObj = new Array();
+var ind=0;
+var outputFrame;
+var msiDb=null;
+var PNGexists = fso.FileExists("tab.png");
+
+function OpenMsiDb() {
+	try {
+	   msiDb = installer.OpenDatabase(MsiFile.value, ReadOnly.checked?0:1);
+      FillSelect();
+      OpenBtn.style.fontWeight="bold";
+      OpenBtn.style.backgroundColor="lightsalmon";
+      MsiFile.disabled=true;
+	   }
+   catch(e) {
+      alert("Can't open file/database.\nThe file may be not an MSI file.\n[err]:"+e.description);
+      return;
+      }
+   }
+function CheckMsiDb() {
+   if(!msiDb) { alert("Please open first an Msi database!"); return false; }
+   else return true;
+   }
+
+function SwitchROCB() {
+   msiDb=null;
+   ResetSelectLists();
+   MsiFile.defaultValue;
+   MsiFile.disabled=false;
+   OpenBtn.style.fontWeight="normal";
+   OpenBtn.style.backgroundColor="white";
+   }
+
+function FillSelect(i) {
+   ResetSelectLists();
+   FillSelectList(0);
+   FillSelectList(1);
+   GetMsiGuid();
+   //iFDObj = 0;
+   //oFDObj = new Array();
+   //FillTreeList(2);
+   //iFDObj = 0;
+   //oFDObj = new Array();
+   //FillTreeList(3);
+   maintab.disabled=false;
+   if(!i) ShowTab(1);
+   }
+function FillSelectList(iType) {
+   sFile=MsiFile.value;
+   aTableName= new Array();
+   iTableName=0;
+
+   if(!CheckMsiDb()) return;
+
+   switch(iType) {
+      case 0:
+      default:
+         msiView = msiDb.OpenView("SELECT * FROM _Tables");
+         break;
+      case 1:
+         msiView = msiDb.OpenView("SELECT * FROM _Streams");
+         break;
+      }
+
+	msiView.Execute();
+	
+	while(msiRecord = msiView.Fetch()) {
+	   aTableName[iTableName++] = msiRecord.StringData(1);
+	   }
+   msiView.Close();
+   delete(msiView);
+   aTableName.sort();
+
+   for(j=0;j< aTableName.length;j++) {
+      AddOption(aTableName[j], aTableName[j], iType);
+      }
+   if (iType==0) InfoText.innerText=aTableName.length+" Tables";
+   else if (iType==1) InfoText.innerText+=" and "+aTableName.length+" Streams.";
+
+}
+
+function FillTreeList(iType) {
+   sFile=MsiFile.value;
+   iTableName=0;
+
+   if(!CheckMsiDb()) return;
+
+   switch(iType) {
+      default:
+      case 2:
+         s=" WHERE Level <= "+MsiNewInstallLevel.value;
+         msiView = msiDb.OpenView("SELECT * FROM Feature "+s);
+         break;
+      case 3:
+         msiView = msiDb.OpenView("SELECT * FROM Directory");
+         break;
+      }
+
+	msiView.Execute();
+	
+	while(msiRecord = msiView.Fetch()) {
+	   if((ShHiddenFeatures.checked && msiRecord.IntegerData(5)==0)) 
+         AddFDObj(msiRecord.StringData(1), msiRecord.StringData(2), "{#}"+msiRecord.StringData(3));
+	   else if (msiRecord.IntegerData(5)!=0)
+         AddFDObj(msiRecord.StringData(1), msiRecord.StringData(2), msiRecord.StringData(3));
+	   }
+
+   loadData();
+   treeData = new Collection();
+	treeData.add(new RootNode('root',MsiProductName.value,'javascript:;','',gPathIcons+"system.gif"));
+
+   for(j=0;j< oFDObj.length;j++) {
+      sParent=oFDObj[j].parent;
+      if(sParent=="") sParent="root";
+   
+      var hasParent=false;
+      for( var k=0; k < oFDObj.length; k++ ) {
+         if(oFDObj[j].item==oFDObj[k].parent) {
+            hasParent=true;
+            break;
+            }
+         }
+      sLink="javascript:;";
+
+	   if(hasParent) {
+         if(parseInt(iType)==2) sPic=gPathIcons+"check.gif";
+         else sPic=gPathIcons+"windows.gif";
+         if((ShFeatDesc.checked && parseInt(iType)==2)
+            ||(ShDirDesc.checked && parseInt(iType)==3))
+            treeData.add(new FolderNode(oFDObj[j].item, sParent, oFDObj[j].display,sLink,sPic,sPic));
+         else
+            treeData.add(new FolderNode(oFDObj[j].item, sParent, oFDObj[j].item,sLink,sPic,sPic));
+         }
+      else {
+         if(parseInt(iType)==3) sPic=gPathIcons+"windows.gif";
+         else sPic=gPathIcons+"check.gif";
+         if(ShFeatDesc.checked && parseInt(iType)==2)
+            treeData.add(new LinkNode(sParent,oFDObj[j].display,sLink,'',sPic));	
+         else
+            treeData.add(new LinkNode(sParent,oFDObj[j].item,sLink,'',sPic));	
+         }
+      }
+
+   drawTree();
+
+   msiView.Close();
+}
+
+function RecurseFDObj(sParent, iType) {
+   sBlank="";
+   var k=1;
+   debugger;
+
+   while( k < oFDObj.length) {
+      if(oFDObj[k].parent==sParent) {
+         ind++;
+         for(l=0;l<ind;l++) { sBlank+="__" };
+         sItemText=sBlank+oFDObj[k].item;
+
+         AddOption(sItemText, oFDObj[k].parent , iType);
+         RecurseFDObj(oFDObj[k].item, iType);
+         --ind;
+         //break;
+         }
+      k++;
+      }
+
+}
+
+function GetMsiGuid() {
+   sFile=MsiFile.value;
+	try {
+   	msiView = msiDb.OpenView("SELECT * FROM Property WHERE Property = 'ProductCode'");
+   	msiView.Execute();
+   	msiRecord=msiView.Fetch();
+   	var sPName = msiRecord.StringData(2);
+   	MsiGuid.value=""+sPName;
+      msiView.Close();
+   	
+   	msiView = msiDb.OpenView("SELECT * FROM Property WHERE Property = 'ProductName'");
+   	msiView.Execute();
+   	msiRecord=msiView.Fetch();
+   	var sPName = msiRecord.StringData(2);
+   	MsiProductName.value=""+sPName;
+      msiView.Close();
+
+      msiView = msiDb.OpenView("SELECT * FROM Property WHERE Property = 'INSTALLLEVEL'");
+   	msiView.Execute();
+   	msiRecord=msiView.Fetch();
+   	var sPName = msiRecord.StringData(2);
+   	MsiInstallLevel.innerHTML="<b>"+sPName+"</b>";
+      MsiNewInstallLevel.value=sPName;
+      msiView.Close();
+   }
+   catch(e) {
+      alert("Can't read propertytable data.\n[desc]:"+e.description);
+      }
+
+}
+
+function ExportTables() {
+   sFile=MsiFile.value;
+   if(!CheckMsiDb()) return;
+   sExpDir= envTemp+"\\"+GetFileName(sFile);
+   try {
+      //fso.DeleteFolder(sExpDir, true);
+      fso.CreateFolder(sExpDir);
+      }
+   catch(e) {;}
+
+   for(i=0;i<MsiTables.length;i++) {
+      InfoText.innerText="Exporting "+MsiTables.options[i].value;
+      msiDb.Export(MsiTables.options[i].value, sExpDir, MsiTables.options[i].value+".tbl");
+      }
+   InfoText.innerHTML="Exported "+MsiTables.length+" tables to <a href=\"file://"+sExpDir+"\">"+sExpDir+"</a>";
+}
+
+function ImportTable() {
+   bAll = true;
+   sTableName = fso.GetFile(ImportFileName.value);
+
+   if(confirm("Import table "+sTableName+"\nto "+sFile+"?")) {
+      try {
+         //alert(sTableName.ParentFolder+" / "+sTableName.Name);
+         msiDb.Import(sTableName.ParentFolder, sTableName.Name);
+         msiDb.Commit();
+         InfoText.innerHTML="Imported "+sTableName+" into "+sFile;
+         }
+      catch(e) {
+         alert("Unable to import "+sTableName+"\n[err:] "+e.description);
+         }
+      }
+}   
+
+function DropTable() {
+   if(MsiTables.selectedIndex<0) {
+      alert("Please select a table");
+      }
+   else {
+      sFile = MsiFile.value;
+      sTableName=MsiTables.options[MsiTables.selectedIndex].value;
+      if(confirm("Really delete table "+sTableName+"\nin "+sFile+"?")) {
+         try {
+            msiView = msiDb.OpenView("DROP TABLE "+sTableName);
+            msiView.Execute();
+            msiDb.Commit();
+            alert("Deleted table "+sTableName);
+            }
+         catch(e) {
+            alert("Unable to drop table: "+sTableName+"\n\n[err]: "+e.description);
+            return;
+            }
+         }
+      FillSelect();
+      }
+}
+
+function ExportStream(s) {
+   try {
+      sExpDir= envTemp+"\\"+GetFileName(MsiFile.value);
+      fso.CreateFolder(sExpDir);
+      sExpDir+= "\\_Streams";
+      fso.CreateFolder(sExpDir);
+      }
+   catch(e) {;}
+   sExpDir= envTemp+"\\"+GetFileName(MsiFile.value)+"\\_Streams";
+
+   try {
+      var execStr="msidb.exe -d "+MsiFile.value+" -x "+s;
+      wsh.Run(execStr, 0, true);
+      fso.CopyFile(s,sExpDir+"\\"+s, true);
+      fso.DeleteFile(s, true);
+      InfoText.innerHTML="Exported Stream(s) to <a href=\""+sExpDir+"\">"+sExpDir+"</a>";
+      }
+   catch(e) {;}
+}
+
+function ExportAllStreams() {
+   for(i=1;i<MsiStreams.length;i++) {
+      InfoText.innerHTML="Exporting "+MsiStreams.options[i].value;
+      ExportStream(MsiStreams.options[i].value);
+      }
+}
+
+function MakeExternalCabs() {
+   try {
+      msiView = msiDb.OpenView("SELECT * FROM Media");
+   	msiView.Execute();
+   	
+   	while(msiRecord = msiView.Fetch()) {
+   	   var s = msiRecord.StringData(4);
+         if (s.charAt(0) == '#') {
+            //msiRecord.StringData(4) = "#"+s;
+            msiRecord.StringData(4) = s.substr(1);
+
+            msiView.Modify(2, msiRecord);
+            InfoText.innerHTML="Externalizing "+s;
+            // extract cabfile
+            var execStr="msidb.exe -d "+MsiFile.value+" -x "+s.substr(1);
+            wsh.Run(execStr, 0, true);
+            alert(execStr);
+
+            msiView2 = msiDb.OpenView("SELECT * FROM _Streams");
+            msiView2.Execute();
+   	      while(msiRecord2 = msiView2.Fetch()) {
+               if(msiRecord2.StringData(1)==s.substr(1)) {
+                  alert("deleting stream");
+                  msiView2.Modify(6, msiRecord2);
+                  msiRecord2.ClearData();
+                  //break;
+                  msiDb.Commit();
+                  }
+               }
+            msiView2.Close();
+            }
+   	   }
+      msiView.Close();
+      msiDb.Commit();
+      }
+   catch(e) {
+      WScript.echo("Error while externalizing.\n[err:] "+e.description);
+      }
+	//rebuild list
+   FillSelect(1);
+}
+
+function ExecSQL(sStatement) {
+   if(!CheckMsiDb()) return;
+   sFile = MsiFile.value;
+   try {
+      msiView = msiDb.OpenView(sStatement);
+      msiView.Execute();
+      }
+   catch(e) {
+      alert("Unable to perform SQL Statement:\n"+sStatement+"\n\n[err]: "+e.description);
+      return;
+      }
+   hWin = window.open("",sStatement.lastIndexOf(" "),"height=400,width=600,scrollbars=yes,resizable=yes,status=yes");
+	hWin.document.close();
+   hWin.document.write("<html><head><hta:application id=\"tblvw\" border=\"thick\" borderstyle=\"sunken\" innerborder=\"no\" scroll=\"yes\" selection=\"yes\"/>");
+
+	hWin.document.write("<style>td,th{font-family:Tahoma;font-size:11px;border:1px solid #999999}th{background-color:#cccccc}</style></head><body style=\"margin:2\">");
+	hWin.document.write("<div id='wait' style=\"font-family:Tahoma;font-size:14px;font-weight:bold;border:0px;\"><img src='"+gPathPBar+"progbar.gif' width=150 height=13></div>");
+	hWin.document.write("<table style=\"border:1px solid black\" width=100% cellpadding=2>");
+   hWin.status="Reading data...";
+
+	msiRecordColInfo = msiView.ColumnInfo(0)
+   hWin.document.write("<tr>");
+	for(i=0;i<msiRecordColInfo.FieldCount;i++) {
+	   hWin.document.write("<th>"+msiRecordColInfo.StringData(i+1)+"</th>");
+      }
+	hWin.document.write("</tr>");
+   iCount=0;
+
+   try {
+      while(msiRecord = msiView.Fetch()) {
+         hWin.document.write("<tr>");
+         for(i=0;i<msiRecord.FieldCount;i++) {
+            if(msiRecord.IsNull(i))
+               hWin.document.write("<td><nobr>[NULL]</nobr></td>");
+            else 
+               try {
+                  hWin.document.write("<td><nobr>"+msiRecord.StringData(i+1)+"</nobr></td>");
+                  }
+               catch(e) {
+                  hWin.document.write("<td>[binary data]</td>");
+                  }
+             }
+         hWin.document.write("</tr>");
+         iCount++;
+         if(!(iCount % 100))
+         hWin.status="Reading data...("+iCount+")";
+         }
+      hWin.document.write("</table>");
+      hWin.document.write("</body></html>");
+      hWin.wait.style.display='none';
+      //hWin.wait.innerText=sStatement;
+      hWin.status=iCount+" Recordsets selected.";
+      hWin.document.title="SQL: '"+sStatement+"' in "+sFile;
+      }
+   catch(e) {
+	   hWin.close();
+      alert("Unable to fetch record.\n[err:]"+e.description);
+      }
+   msiView.Close();
+}
+
+function ResetSelectLists() {
+	for(var i=MsiTables.length-1; i>-1 ;i--) {
+		MsiTables.remove(i);
+	}
+	for(var i=MsiStreams.length-1; i>-1 ;i--) {
+		MsiStreams.remove(i);
+	}
+}
+
+function AddOption(sText, sValue, iType) {
+	var oOption = document.createElement("OPTION");
+	oOption.text=sText;
+	oOption.value=sValue;
+	switch(iType) {
+      case 0:
+         MsiTables.add(oOption);
+         break;
+      case 1:
+         MsiStreams.add(oOption);
+         break;
+      }
+	return;
+}
+
+function AddFDObj (item, parent, display) {
+  oFDObj[iFDObj] = new Object;
+  oFDObj[iFDObj].item=item;
+  oFDObj[iFDObj].parent=parent;
+  oFDObj[iFDObj].display=display;
+  iFDObj++;
+  }
+
+function GetFileName(sFile) {
+   try {
+      f = fso.GetFile(sFile);
+   	s1=f.Name
+   	s2=s1.indexOf(".");
+    	sTemp=""+s1.substr(0,s2);
+      return(sTemp);
+      }
+   catch(e) {
+      alert("FileGetError: File doesn't exist.\n"+e.description);
+      }
+}
+
+function ShowTab(i) {
+   bTables.style.display='none';
+   dTables.style.display='none';
+   bStreams.style.display='none';
+   dStreams.style.display='none';
+   bFeatures.style.display='none';
+   dFeaturesDirs.style.display='none';
+   bDirectories.style.display='none';
+   bSQL.style.display='none';
+   dSQL.style.display='none';
+   MsiFile.defaultValue="";
+
+   PNGexists? tonCSS="tabonPNG": tonCSS="tabon";
+   PNGexists? toffCSS="taboffPNG": toffCSS="taboff";
+   
+   tab1.className=tab2.className=tab3.className=tab4.className=tab5.className= toffCSS;
+
+   if(ReadOnly.checked) {
+      DelTabBtn.disabled=true;
+      fsCab.disabled=true;
+      ImpFN.disabled=true;
+      }
+   else {
+      DelTabBtn.disabled=false;
+      fsCab.disabled=false;
+      ImpFN.disabled=false;
+      }
+
+   switch(i) {
+      case 0:
+      case 1:
+      default:
+         bTables.style.display='';
+         dTables.style.display='';
+         tab1.className=tonCSS;
+         break;
+      case 2:
+         bStreams.style.display='';
+         dStreams.style.display='';
+         tab2.className=tonCSS;
+         break;
+      case 3:
+         bFeatures.style.display='';
+         dFeaturesDirs.style.display='';
+         tab3.className=tonCSS;
+         iFDObj = 0;
+         oFDObj = new Array();
+         FillTreeList(2);
+         break;
+      case 4:
+         bDirectories.style.display='';
+         dFeaturesDirs.style.display='';
+         tab4.className=tonCSS;
+         iFDObj = 0;
+         oFDObj = new Array();
+         FillTreeList(3);
+         break;
+      case 5:
+         dSQL.style.display='';
+         bSQL.style.display='';
+         tab5.className=tonCSS;
+         break;
+
+      }
+   tcbody.focus();
+}
+</script>
+<title>MSI KWYJIBO</title>
+<style>
+ body, button, input, p, td, select {font-family:Tahoma;font-size:11px}
+ optgroup {font-family:Tahoma;font-size:12px;font-weight:normal;font-style:normal}
+ button, input {background-color:white;}
+ a:hover{color:#000000}
+ a:visited{color:#000000}
+ .tabon {border:1px solid black;border-bottom:none;background-color:#eeeeee;font-weight:bold;}
+ .tabonPNG {border:0px solid black;border-bottom:none;background-color:#eeeeee;font-weight:bold;background-image:url(./tab.active.png)}
+ .taboff {border:1px solid gray dashed;border-bottom:none;background-color:#ffffff;font-weight:normal;}
+ .taboffPNG {border:0px solid gray dashed;border-bottom:none;background-color:#ffffff;font-weight:normal;background-image:url(./tab.png)}
+ .gradient {filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#000099,endColorstr=#ccccff)}
+ .wdings {font-family:Webdings;font-size:13px;font-weight:normal;}
+</style>
+</head>
+<body id="tcbody" onload="window.resizeTo(550,440);ShowTab(1);"  style="background-color:white;margin-top:0;margin-right:0;" link=#999999 vlink=#999999 alink=#999999>
+
+<div style="position:absolute;left:0;top:0;width:550;height:60;background-color:#cbcbcb;color:#ffffff;padding:10" class="gradient">Flatbyte's
+<div style="font-family:Trebuchet MS,Verdana;font-size:36px;font-weight:bold;filter:Glow(color=#000000,strength=5);width:100%">MSI KWYJIBO
+</div></div>
+<br><br><br><br><br><br>
+<br style="line-height:6px">
+<div id="RODiv" style="position:absolute;top:110;right:15;border-bottom:1px solid #999999;border-left:1px solid #999999"><input id="ReadOnly" type=checkbox checked onClick="SwitchROCB();self.focus();">Read-Only</div>
+
+<table><tr><td>MSI File: </td><td><input type=file size=60 id="MsiFile" style="background-color:#ffffff" value="">
+<input type=button id="OpenBtn" value="Open" onClick="OpenMsiDb()">&nbsp;<input type=button id="CloseBtn" value="Close" onClick="location.reload()">
+<input type=hidden id="MsiGuid" value=""><input type=hidden id="MsiProductName" value="">
+</td></tr></table>
+<br style="line-height:6px">
+<table cellpadding=0 id="maintab" disabled><tr><td colspan=2>
+<table cellpadding=3><tr><td id="tab1"><a href="#" style="text-decoration:none" OnClick="ShowTab(1);">Tables</a></td>
+<td id="tab2"><a href="#" style="text-decoration:none" OnClick="ShowTab(2);">Streams</a></td>
+<td id="tab3"><a href="#" style="text-decoration:none" OnClick="ShowTab(3);">Features</a></td>
+<td id="tab4"><a href="#" style="text-decoration:none" OnClick="ShowTab(4);">Directories</a></td>
+<td id="tab5"><a href="#" style="text-decoration:none" OnClick="ShowTab(5);">SQL</a></td>
+</tr></table>
+
+</td></tr>
+<tr><td>
+<div id="dTables">
+<select id="MsiTables" size=17 style="width:330" OnDblClick="ExecSQL('SELECT * FROM '+this.options[this.selectedIndex].value)">
+
+</select>
+</div>
+<div id="dStreams" style="display:none">
+<select id="MsiStreams" size=17 style="width:330" OnDblClick="ExportStream(this.options[this.selectedIndex].value)">
+
+</select>
+</div>
+<div id="dFeaturesDirs" style="display:none">
+<iframe id="hudel" style="width:327;height:225;border:1px groove gray" APPLICATION=yes></iframe>
+</div>
+
+<div id="dSQL" style="display:none">
+<fieldset style="width:323;height:222;border:1px groove gray;padding:5">
+SQL Term:<br>
+<textarea style="width:318;height:180" id="MsiSQL"></textarea>
+<input type=button value="Run SQL" OnClick="ExecSQL(MsiSQL.value);">
+</fieldset>
+</div>
+
+</td><td>&nbsp;&nbsp;</td>
+<td valign=top align=left>
+<div id="bTables" style="display:none">
+<input type=button style="width:150px" value="Export All Tables" OnClick="ExportTables();">
+<input id="DelTabBtn" type=button style="width:150px" value="Delete Table" OnClick="DropTable();">
+<br><br><div id="impF">Select file/table to import:
+<input id="ImpFN" type=file name="ImportFileName" style="width:150px;" onChange="ImportTable();">
+</div>
+<br><br>
+<div disabled><b>HINT:</b> Double-click on the tablename<br>to view it's data values.</div>
+
+</div>
+<div id="bStreams" style="display:none">
+<input type=button style="width:150px" value="Export All Streams" OnClick="ExportAllStreams();">
+<br><br><fieldset id="fsCab" style="padding:3;border:0px;border-top:1px solid black;width:150px"><legend style="font-weight:bold;">CAB File Handling</legend>
+<input type=button style="width:150px" value="Convert to external CAB" OnClick="MakeExternalCabs();" title="Export an internal CAB file to an external CAB file">
+<input type=button style="width:150px" value="Convert to internal CAB" OnClick=";" title="Import an external CAB file to an internal CAB file">
+<input type=button style="width:150px" value="Recompress CAB" OnClick=";" title="Recompress/Replace internal CAB file. Needs CABARC.exe in path">
+</fieldset>
+<br><br>
+<div disabled><b>HINT:</b> Export needs msidb.exe, recompress needs cabarc.exe in your path. Double-click to export one stream.</div>
+
+</div>
+<div id="bFeatures" style="display:none">
+<input type="checkbox" checked id="ShHiddenFeatures" OnClick="ShowTab(3);">Show Hidden Features<br>
+<input type="checkbox" checked id="ShFeatDesc" OnClick="ShowTab(3);">Show Feature Description<br><hr>
+<nobr>Default Install Level: <span id="MsiInstallLevel"></span></nobr><hr>
+Set NEW Level <input size=3 id="MsiNewInstallLevel">&nbsp;<input type=button value="Show" OnClick="ShowTab(3)"><br><br>
+<div disabled><b>HINT:</b> Set new Installlevel to check features being installed at this level.</div>
+</div>
+<div id="bDirectories" style="display:none">
+<input type="checkbox" id="ShDirDesc" OnClick="ShowTab(4);">Show Directory Names<br>
+&nbsp;
+</div>
+<div id="bSQL" style="display:none">
+<b>SYNTAX:</b><br>
+SELECT {column(s)|*} FROM {table} 
+<br>WHERE {column}{operator}{value}
+<br>ORDER BY {column(s)}
+<br>
+<br>for more help on SQL Syntax check your MSI SDK Documentation.
+</div>
+
+<br><div id="tbd" style="z-Index:1">
+</div>
+</td></tr></table>
+<div id="InfoText">&nbsp;</div>
+<div id="pic" style="position:absolute;right:-10;bottom:-10;z-Index:-5"><img src="C:\WINDOWS\Help\Tours\htmlTour\best_secure_big.jpg"></div>
+<div style="position:absolute;bottom:0;left:0;color:#cccccc"><nobr>(c)2004 by <a href="http://www.flatbyte.com" target=_new>flatbyte.com</a>, All Rights reserved.</nobr></div>
+</body>
+</html>
